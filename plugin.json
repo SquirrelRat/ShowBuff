@@ -1,0 +1,24 @@
+{
+  "Name": "ShowBuff",
+  "DisplayName": "ShowBuff",
+  "Description": "Displays selected buffs/debuffs with positioning and dynamic settings (ExileAPI).",
+  "Version": "1.0.0",
+  "Author": "Master0K",
+  "MainAssembly": "ShowBuff_exileapi.dll",
+  "MainClass": "ShowBuff_exileapi.ShowBuff",
+  "Dependencies": [
+    "ExileCore"
+  ],
+  "Settings": {
+    "Enable": true,
+    "UseEnglish": true,
+    "FontSize": 1.0,
+    "HeightOffset": 60,
+    "ShowBackground": true,
+    "BackgroundColor": "Black",
+    "ShowInHideout": false,
+    "BuffSettings": []
+  }
+}
+
+
