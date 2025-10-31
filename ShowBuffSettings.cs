@@ -62,6 +62,10 @@ public class ShowBuffSettings : ISettings
     [Menu("Buff Settings")] public EmptyNode BuffsHeader { get; set; } = new EmptyNode();
 
     public List<ShowBuffSetting> BuffSettings { get; set; } = new List<ShowBuffSetting>();
+
+    [Menu("Buff Type Filter", "Comma-separated list of BuffDefinition.Type numbers (e.g., 1,2,18)")]
+    public TextNode BuffTypeFilter { get; set; } = new TextNode("");
+
+    [Menu("Filter Buff Types", "If enabled, only show buffs matching the filter. If disabled, hide buffs matching the filter.")]
+    public ToggleNode FilterBuffTypes { get; set; } = new ToggleNode(false);
 }
-
-

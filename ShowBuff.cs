@@ -14,10 +14,13 @@ namespace ShowBuff_exileapi;
 public class ShowBuff : BaseSettingsPlugin<ShowBuffSettings>
 {
     private string T(string en, string ru) => Settings.UseEnglish ? en : ru;
+    private List<Buff> _detectedBuffs = new List<Buff>();
+    private HashSet<string> _lastKnownActiveBuffNames = new HashSet<string>();
 
     public override bool Initialise()
     {
         Name = "ShowBuff";
+        UpdateDetectedBuffs();
         return true;
     }
 
@@ -117,6 +120,44 @@ public class ShowBuff : BaseSettingsPlugin<ShowBuffSettings>
 
         if (ImGui.Button("+ " + T("Add Buff", "Добавить бафф")))
             Settings.BuffSettings.Add(new ShowBuffSetting { DisplayName = new ExileCore.Shared.Nodes.TextNode($"Buff{Settings.BuffSettings.Count + 1}") });
+
+        ImGui.Separator();
+        ImGui.Text(T("Detected Buffs", "Обнаруженные баффы"));
+        ImGui.SameLine();
+        if (ImGui.Button(T("Refresh", "Обновить") + "##RefreshDetectedBuffs"))
+        {
+            UpdateDetectedBuffs();
+        }
+        ImGui.TextColored(new System.Numerics.Vector4(0.7f, 0.7f, 0.7f, 1),
+            T("Active buffs on your character. Click + to add to configuration.",
+              "Активные баффы на вашем персонаже. Нажмите + чтобы добавить в конфигурацию."));
+
+        if (GameController.Player != null && GameController.Player.IsValid)
+        {
+            foreach (var buff in _detectedBuffs)
+            {
+                if (buff?.Name == null) continue;
+
+                ImGui.Text($"{buff.Name} (");
+                ImGui.SameLine();
+                ImGui.TextColored(new System.Numerics.Vector4(0, 1, 0, 1), buff.DisplayName);
+                ImGui.SameLine();
+                ImGui.Text($") (Stacks: {buff.BuffStacks})");
+                ImGui.SameLine();
+                if (ImGui.Button($"+" + $"##DetectedBuff_{buff.Name}"))
+                {
+                    if (!Settings.BuffSettings.Any(x => x.BuffName.Value == buff.Name))
+                    {
+                        Settings.BuffSettings.Add(new ShowBuffSetting
+                        {
+                            BuffName = new ExileCore.Shared.Nodes.TextNode(buff.Name),
+                            DisplayName = new ExileCore.Shared.Nodes.TextNode(buff.DisplayName),
+                            Show = new ExileCore.Shared.Nodes.ToggleNode(true)
+                        });
+                    }
+                }
+            }
+        }
     }
 
     public override void Render()
@@ -130,6 +171,17 @@ public class ShowBuff : BaseSettingsPlugin<ShowBuffSettings>
         var player = GameController.Player;
         if (player == null || !player.IsValid)
             return;
+
+        var currentActiveBuffNames = GetAllActiveBuffs(player)
+            .Where(b => b?.Name != null)
+            .Select(b => b.Name)
+            .ToHashSet();
+
+        if (!_lastKnownActiveBuffNames.SetEquals(currentActiveBuffNames))
+        {
+            UpdateDetectedBuffs();
+            _lastKnownActiveBuffNames = currentActiveBuffNames;
+        }
 
         var playerPos = player.Pos;
         if (playerPos.Equals(default(Vector3)))
@@ -199,6 +251,81 @@ public class ShowBuff : BaseSettingsPlugin<ShowBuffSettings>
         return count;
     }
 
+    private List<Buff> GetAllActiveBuffs(Entity player)
+    {
+        var result = new List<Buff>();
+        try
+        {
+            if (player.TryGetComponent<Buffs>(out var buffComp))
+            {
+                var allBuffs = buffComp.BuffsList ?? new List<Buff>();
+
+                var filterTypes = Settings.BuffTypeFilter.Value
+                    .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(s => int.TryParse(s.Trim(), out var type) ? type : (int?)null)
+                    .Where(type => type.HasValue)
+                    .Select(type => type.Value)
+                    .ToHashSet();
+
+                foreach (var buff in allBuffs)
+                {
+                    if (buff?.Name == null || buff.BuffDefinition == null) continue;
+
+                    var buffType = buff.BuffDefinition.Type;
+                    bool typeMatchesFilter = filterTypes.Contains(buffType);
+
+                    if (Settings.FilterBuffTypes.Value) // If enabled, INCLUDE matching types
+                    {
+                        if (typeMatchesFilter)
+                        {
+                            result.Add(buff);
+                        }
+                    }
+                    else // If disabled, EXCLUDE matching types
+                    {
+                        if (!typeMatchesFilter)
+                        {
+                            result.Add(buff);
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception e)
+        {
+            LogError($"GetAllActiveBuffs error: {e.Message}", 5);
+        }
+        return result;
+    }
+
+    private void UpdateDetectedBuffs()
+    {
+        var player = GameController.Player;
+        if (player == null || !player.IsValid) return;
+
+        var currentActiveBuffs = GetAllActiveBuffs(player)
+            .Where(b => b?.Name != null)
+            .GroupBy(b => b.Name)
+            .Select(g => g.First())
+            .ToList();
+
+        var filteredDetectedBuffs = _detectedBuffs
+            .Where(existingBuff => currentActiveBuffs.Any(activeBuff => activeBuff.Name == existingBuff.Name))
+            .ToList();
+
+        var newlyActiveBuffs = currentActiveBuffs
+            .Where(activeBuff => !filteredDetectedBuffs.Any(existingBuff => existingBuff.Name == activeBuff.Name))
+            .ToList();
+
+        var combinedBuffs = newlyActiveBuffs.Concat(filteredDetectedBuffs).ToList();
+
+        _detectedBuffs = combinedBuffs
+            .GroupBy(b => b.Name)
+            .Select(g => g.First())
+            .Take(5)
+            .ToList();
+    }
+
     private void DrawBuffs(Vector2 headPos, List<(string displayName, int count, Color color, bool useHeadPos, int posX, int posY, bool hideCount)> items)
     {
         if (items.Count == 0) return;
@@ -235,5 +362,3 @@ public class ShowBuff : BaseSettingsPlugin<ShowBuffSettings>
         }
     }
 }
-
-
